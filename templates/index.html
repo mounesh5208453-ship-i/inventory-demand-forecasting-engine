@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Inventory Demand Forecasting Engine</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .hero { background: linear-gradient(135deg, #2b5876, #4e4376); color: white; padding: 2rem 0; border-radius: 0 0 1rem 1rem; margin-bottom: 2rem; }
+        .card { border: none; border-radius: 0.75rem; box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; }
+        .card:hover { transform: translateY(-4px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+    <div class="hero text-center">
+        <div class="container">
+            <h1 class="display-5 fw-bold">📦 Inventory Demand Forecasting Engine</h1>
+            <p class="lead">Interactive Stockout Prediction & Deep-Dive SKU Analytics</p>
+            <span id="health-badge" class="badge bg-success fs-6">System Status: Checking...</span>
+        </div>
+    </div>
+
+    <div class="container mb-5">
+        <!-- Interactive Search / Filter Bar -->
+        <div class="row mb-4">
+            <div class="col-md-6 mx-auto">
+                <form id="searchForm" onsubmit="handleSearch(event)" class="input-group shadow-sm">
+                    <input type="text" id="skuSearchInput" class="form-control" placeholder="Search SKU (e.g., SKU-101)...">
+                    <button class="btn btn-primary" type="submit">Filter SKU</button>
+                    <button class="btn btn-outline-secondary" type="button" onclick="resetFilter()">Reset</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Dynamic Grid -->
+        <div id="forecastGrid" class="row g-4"></div>
+    </div>
+
+    <!-- Interactive Detail Modal -->
+    <div class="modal fade" id="skuDetailModal" tabindex="-1" aria-labelledby="skuModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title fw-bold" id="skuModalLabel">SKU Analytics Deep-Dive</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4" id="modalBodyContent">
+                    <!-- Dynamic details injected here -->
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle (Required for Modals) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        let allForecastData = [];
+
+        // Check system health on load
+        fetch('/health')
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('health-badge').innerText = `System Status: ${data.status.toUpperCase()}`;
+            });
+
+        // Load forecast data
+        function loadForecasts(querySku = '') {
+            let url = '/api/forecast';
+            if (querySku) {
+                url += `?sku=${encodeURIComponent(querySku)}`;
+            }
+
+            fetch(url)
+                .then(res => {
+                    if (!res.ok) throw new Error("SKU not found");
+                    return res.json();
+                })
+                .then(result => {
+                    allForecastData = result.forecasts;
+                    const grid = document.getElementById('forecastGrid');
+                    grid.innerHTML = ''; 
+
+                    result.forecasts.forEach(item => {
+                        const alertClass = item.reorder_recommended ? 'border-start border-4 border-danger bg-white' : 'border-start border-4 border-success bg-white';
+                        const badgeColor = item.reorder_recommended ? 'bg-danger' : 'bg-success';
+                        const badgeText = item.reorder_recommended ? '⚠️ Reorder Needed' : '✅ Stock Stable';
+
+                        const card = document.createElement('div');
+                        card.className = 'col-md-6';
+                        card.innerHTML = `
+                            <div class="card p-4 h-100 ${alertClass}" onclick="openSkuModal('${item.sku}')">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="text-muted fw-bold font-monospace">${item.sku}</span>
+                                        <span class="badge ${badgeColor}">${badgeText}</span>
+                                    </div>
+                                    <h4 class="card-title fw-bold text-dark mb-3">${item.product_name}</h4>
+                                    <hr>
+                                    <p class="mb-1"><strong>Current Stock:</strong> ${item.current_stock} units</p>
+                                    <p class="mb-1"><strong>Daily Demand Rate:</strong> ${item.daily_demand_rate} units/day</p>
+                                    <p class="mb-0 text-primary"><strong>Click for Deep-Dive Analytics &rarr;</strong></p>
+                                </div>
+                            </div>
+                        `;
+                        grid.appendChild(card);
+                    });
+                })
+                .catch(err => {
+                    const grid = document.getElementById('forecastGrid');
+                    grid.innerHTML = `
+                        <div class="col-12 text-center py-5">
+                            <div class="alert alert-warning shadow-sm d-inline-block px-4">
+                                ❌ <strong>SKU not found.</strong> Try searching for <code>SKU-101</code>, <code>SKU-102</code>, <code>SKU-103</code>, or <code>SKU-104</code>.
+                            </div>
+                        </div>`;
+                });
+        }
+
+        // Open interactive detail modal for a specific SKU
+        function openSkuModal(skuCode) {
+            const item = allForecastData.find(i => i.sku === skuCode);
+            if (!item) return;
+
+            document.getElementById('skuModalLabel').innerText = `Analytics: ${item.sku}`;
+            
+            const modalBody = document.getElementById('modalBodyContent');
+            modalBody.innerHTML = `
+                <h4 class="fw-bold text-primary mb-3">${item.product_name}</h4>
+                <ul class="list-group list-group-flush mb-3">
+                    <li class="list-group-item d-flex justify-content-between"><span>SKU Identifier:</span> <strong>${item.sku}</strong></li>
+                    <li class="list-group-item d-flex justify-content-between"><span>Current Stock Level:</span> <strong>${item.current_stock} units</strong></li>
+                    <li class="list-group-item d-flex justify-content-between"><span>Daily Consumption Rate:</span> <strong>${item.daily_demand_rate} units/day</strong></li>
+                    <li class="list-group-item d-flex justify-content-between"><span>Supplier Lead Time:</span> <strong>${item.lead_time_days} days</strong></li>
+                    <li class="list-group-item d-flex justify-content-between"><span>Est. Days Until Stockout:</span> <strong class="text-danger">${item.days_until_stockout} days</strong></li>
+                </ul>
+                <div class="p-3 rounded ${item.reorder_recommended ? 'bg-danger-subtle text-danger' : 'bg-success-subtle text-success'} fw-bold">
+                    ${item.reorder_recommended ? '⚠️ Action Required: Stock is projected to deplete within lead time buffer. Immediate replenishment advised.' : '✅ Status Optimal: Stock levels are healthy relative to supplier lead times.'}
+                </div>
+            `;
+
+            const detailModal = new bootstrap.Modal(document.getElementById('skuDetailModal'));
+            detailModal.show();
+        }
+
+        function handleSearch(event) {
+            event.preventDefault();
+            const skuVal = document.getElementById('skuSearchInput').value.trim();
+            loadForecasts(skuVal);
+        }
+
+        function resetFilter() {
+            document.getElementById('skuSearchInput').value = '';
+            loadForecasts();
+        }
+
+        loadForecasts();
+    </script>
+</body>
+</html>
